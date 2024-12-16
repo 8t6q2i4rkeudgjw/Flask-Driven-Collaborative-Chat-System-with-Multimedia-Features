@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Chat Application</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="static\style.css">
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script>
+        const socket = io.connect(window.location.href);
+
+        // Display messages in the chat box
+        socket.on('message', function(msg) {
+            displayMessage(msg);
+        });
+
+        // Display a file message
+       // Client-side code to display file message
+        socket.on('file', function(data) {
+            displayMessage(`${data.username} shared 📎 <a href="${data.fileUrl}" target="_blank">Download ${data.fileName}</a>`);
+        });
+
+
+        // Display a location message
+        socket.on('location', function(locationUrl) {
+            displayMessage(`📍 <a href="${locationUrl}" target="_blank">Shared Location</a>`);
+        });
+
+        // Send a text message
+        function sendMessage() {
+            const messageInput = document.getElementById('message');
+            const message = messageInput.value;
+            socket.emit('message', { username: username, message: message });  // Send message to server
+            messageInput.value = '';  // Clear input field
+        }
+
+        // Send a file as binary data
+        function sendFile() {
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
+            const maxFileSize = 50 * 1024 * 1024; // 50 MB limit
+        
+            if (file && file.size > maxFileSize) {
+                alert("File size exceeds 50 MB limit.");
+                fileInput.value = ''; // Reset the file input
+                return;
+            }
+        
+            if (file) {
+                displayMessage("Uploading file..."); // Display loading message
+                const reader = new FileReader();
+        
+                // Read the file as binary data (ArrayBuffer)
+                reader.onload = function(event) {
+                    // Emit the file along with the username
+                    socket.emit('file', {
+                        username: username,  // Add username here
+                        fileName: file.name,
+                        fileData: event.target.result
+                    });
+        
+                    displayMessage("File uploaded!"); // Display confirmation
+                };
+        
+                reader.readAsArrayBuffer(file); // Read as binary data
+                fileInput.value = ''; // Reset the file input
+            }
+        }
+        
+        function shareLocation() {
+            // Check if geolocation is supported
+            if (navigator.geolocation) {
+                // Get current position
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+                        const locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        
+                        // Emit location to the server
+                        socket.emit('location', { username: "User", locationUrl: locationUrl });
+        
+                        // Display feedback to the user
+                        displayMessage("Location shared successfully!");
+                    },
+                    error => {
+                        // Handle different error codes
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                alert("Location access denied. Please enable location sharing to use this feature.");
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                alert("Location information is unavailable. Please try again later.");
+                                break;
+                            case error.TIMEOUT:
+                                alert("Location request timed out. Please try again.");
+                                break;
+                            default:
+                                alert("An unknown error occurred while retrieving location.");
+                                break;
+                        }
+                    },
+                    {
+                        enableHighAccuracy: true, // High accuracy
+                        timeout: 10000, // 10 seconds timeout
+                        maximumAge: 0 // No cache, fresh location
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by your browser. Please use a supported browser.");
+            }
+        }
+        
+        // Function to display messages on the UI
+        function displayMessage(message) {
+            const messageContainer = document.getElementById('messageContainer');
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            messageContainer.appendChild(messageElement);
+        }
+        
+        
+        // Display message in chat box with error handling
+        function displayMessage(message) {
+            const chatBox = document.getElementById('chat-box');
+            if (chatBox) {
+                const newMessage = document.createElement('div');
+                newMessage.innerHTML = message;
+                chatBox.appendChild(newMessage);
+                chatBox.scrollTop = chatBox.scrollHeight;  // Scroll to the bottom
+            } else {
+                console.error("Chat box element not found.");
+            }
+        }
+
+        // Prompt for a username
+        let username = prompt("Enter your name:");
+        socket.emit('join', username);  // Notify server of new user
+
+        // Update online users count with error handling
+        socket.on('update_online_count', function(count) {
+            const onlineUsers = document.getElementById('online-users');
+            if (onlineUsers) {
+                onlineUsers.innerText = count;
+            } else {
+                console.error("Online users element not found.");
+            }
+        });
+
+        // Display messages when users join or leave
+        socket.on('user_event', function(msg) {
+            displayMessage(`<em>${msg}</em>`);
+        });
+    </script>
+  
+</head>
+<body>
+    <h2>Group Chat Application</h2>
+    <div id="chat-container">
+        <div id="online-count">Online: <span id="online-users">0</span></div>
+        <div id="chat-box"></div>
+        <div id="input-area">
+            <input type="text" id="message" placeholder="Type a message..." autocomplete="off">
+            <button onclick="sendMessage()">Send</button>
+            <button onclick="shareLocation()">Send Location</button>
+            <input type="file" id="file-input" style="display: none;" onchange="sendFile()">
+            <button onclick="document.getElementById('file-input').click()">Attach File</button>
+        </div>
+    </div>
+    
+        <div id="emoji-panel">
+            <span class="emoji">😀</span>
+            <span class="emoji">👍</span>
+            <span class="emoji">😍</span>
+            <span class="emoji">✋</span>
+            <span class="emoji">😎</span>
+            <span class="emoji">🙂</span>
+        </div>
+    </div>
+    
+    <script>
+    function toggleEmojiPanel() {
+        const panel = document.getElementById('emoji-panel');
+        panel.classList.toggle('show');
+    }
+    
+    document.querySelectorAll('.emoji').forEach(emoji => {
+        emoji.addEventListener('click', () => {
+            const messageInput = document.getElementById('message');
+            messageInput.value += emoji.textContent;
+        });
+    });
+    </script>
+    
+</body>
+</html>
